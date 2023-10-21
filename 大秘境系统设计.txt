@@ -1,0 +1,1316 @@
+针对2021年左右的azerothcore设计大秘境系统：
+1. 选择大秘境
+好处：玩家可以方便地选择大秘境模式，与当前的游戏流程相契合。
+改进：确保服务端有足够的验证和安全机制来处理玩家的选择，防止任何潜在的滥用或错误。
+
+2. 钥石和插座
+好处：为大秘境添加一个物理元素（钥石和插座），增加游戏的互动性和沉浸感。
+改进：需要确保钥石的获取和使用是平衡和公平的，避免某些玩家因为钥石的原因而具有不公平的优势。
+
+3. UI 界面和 BUFF
+好处：通过 UI 显示大秘境的信息，提供了一个直观的方式让玩家了解当前副本的状态和挑战。
+改进：确保 UI 的设计是用户友好的，易于理解和操作。同时，BUFF 的设计需要保持游戏的平衡性。
+
+4. 生物数量和强度
+好处：根据钥石等级调整生物的数量和强度，增加了游戏的动态性和挑战性。
+改进：需要一个详细和精确的算法来调整生物的属性，确保每个等级的大秘境都是可完成且具有挑战性的。
+
+5. 倒计时和屏障
+好处：增加了游戏的紧张感和竞争性，也为玩家提供了准备的时间。
+改进：屏障和倒计时需要有明确的视觉和音效提示，让玩家清楚地知道何时开始。
+
+6. 通关要求和奖励
+好处：明确的通关要求和奖励机制，激励玩家努力完成挑战。
+改进：奖励需要设计得既吸引又公平，避免过度奖励或惩罚。钥石的升降级逻辑需要仔细平衡，以维持玩家的兴趣和挑战性。
+
+
+数据库设计：存储和管理钥石的信息，记录大秘境的状态和玩家的进度。
+服务端逻辑：处理玩家的请求，控制大秘境的流程，调整生物的属性，管理奖励和惩罚等。
+
+客户端插件选择，让玩家选择大秘境难度。 
+1、大秘境普通
+2、大秘境一般
+3、大秘境困难
+4、大秘境厄运
+[客户端插件已实现点击难度功能，现在只需要专注源码实现就行]
+
+
+源码制作流程
+1、
+ src/server/game/Entities/Player/Player.cpp | 12 +++++++++++-
+ 1 file changed, 11 insertions(+), 1 deletion(-)
+
+diff --git a/src/server/game/Entities/Player/Player.cpp b/src/server/game/Entities/Player/Player.cpp
+index 05d3950..5ec9ec3 100644
+--- a/src/server/game/Entities/Player/Player.cpp
++++ b/src/server/game/Entities/Player/Player.cpp
+@@ -1,4 +1,4 @@
+-/*
++﻿/*
+  * Copyright (C) 2016+     AzerothCore <www.azerothcore.org>, released under GNU GPL v2 license: https://github.com/azerothcore/azerothcore-wotlk/blob/master/LICENSE-GPL2
+  * Copyright (C) 2008-2016 TrinityCore <http://www.trinitycore.org/>
+  * Copyright (C) 2005-2009 MaNGOS <http://getmangos.com/>
+@@ -126,6 +126,7 @@
+ #include "_SM_SoulStone/_SM_SoulStone.h"
+ #include "../_SM_DoubleArmor/DoubleArmor.h"
+ #include "Shangmei_LingDiZhan.h"
++#include "VirtualKeystoneManager.h"     //大秘境系统
+ 
+ #ifdef ELUNA
+ #include "LuaEngine.h"
+@@ -1300,6 +1301,11 @@ Player::Player(WorldSession* session) : Unit(true), m_mover(this)
+     m_applyResilience = true;
+ 
+     m_isInstantFlightOn = true;
++
++
++    ///////////////////////////////////////////////////////////////////////////////////////自定义大秘境
++    selectedMythicPlusDifficulty = 0; //初始化 玩家选择大秘境难度
++
+ }
+ 
+ Player::~Player()
+@@ -27370,6 +27376,10 @@ void Player::StoreLootItem(uint8 lootSlot, Loot* loot)
+ 
+     LootItem* item = loot->LootItemInSlot(lootSlot, this, &qitem, &ffaitem, &conditem);
+ 
++    // 钩子：玩家选择拾取某个物品
++    sVirtualKeystoneMgr->OnPlayerPickItem(this, item->itemid);
++
++
+     if (!item || item->is_looted)
+     {
+         SendEquipError(EQUIP_ERR_ALREADY_LOOTED, nullptr, nullptr);
+
+2、
+ src/server/game/Entities/Player/Player.h | 791 ++++++++++++++++---------------
+ 1 file changed, 412 insertions(+), 379 deletions(-)
+
+diff --git a/src/server/game/Entities/Player/Player.h b/src/server/game/Entities/Player/Player.h
+index b09fa3a..1c278dd 100644
+--- a/src/server/game/Entities/Player/Player.h
++++ b/src/server/game/Entities/Player/Player.h
+@@ -1,4 +1,4 @@
+-/*
++﻿/*
+  * Copyright (C) 2016+     AzerothCore <www.azerothcore.org>, released under GNU GPL v2 license: https://github.com/azerothcore/azerothcore-wotlk/blob/master/LICENSE-GPL2
+  * Copyright (C) 2008-2016 TrinityCore <http://www.trinitycore.org/>
+  * Copyright (C) 2005-2009 MaNGOS <http://getmangos.com/>
+  
+  class Player : public Unit, public GridObject<Player>
+{
+    friend class WorldSession;
+    friend void Item::AddToUpdateQueueOf(Player* player);
+    friend void Item::RemoveFromUpdateQueueOf(Player* player);
+public:
+
+    ///////////////////////////////////////////////////////////////////////////////////////自定义大秘境
+    int32 selectedMythicPlusDifficulty; //玩家选择大秘境难度
+private:
+    std::vector<uint32> _pendingKeystoneDrops;
+
+    /*
+    当Player类击杀了一个生物并调用OnCreatureKill时，
+    他们的待处理钥石就会被保存下来。
+    之后，当玩家尝试拾取时，可以使用GetPendingKeystoneDrop来获取并显示钥石。
+    */
+public:
+    void StorePendingKeystoneDrop(const std::vector<uint32>& keystones)
+    {
+        _pendingKeystoneDrops = keystones;
+    }
+
+    //使用std::optional 表明可能没有等待的钥石掉落
+    std::optional<uint32> GetPendingKeystoneDrop()
+    {
+        if (_pendingKeystoneDrops.empty())
+            return std::nullopt;
+
+        // 随机选择一个钥石ID        
+        uint32 keystone = acore::Containers::SelectRandomContainerElement(_pendingKeystoneDrops);
+        _pendingKeystoneDrops.clear();
+        return keystone;
+    }
+
+    ///////////////////////////////////////////////////////////////////////////////////////自定义大秘境
+
+
+    void CleanupsBeforeDelete(bool finalCleanup = true) override;
+	
+3、
+ src/server/game/Handlers/LootHandler.cpp | 9 ++++++++-
+ 1 file changed, 8 insertions(+), 1 deletion(-)
+
+diff --git a/src/server/game/Handlers/LootHandler.cpp b/src/server/game/Handlers/LootHandler.cpp
++
++#include "VirtualKeystoneManager.h"     //大秘境系统
+ #endif
+ 
+ void WorldSession::HandleAutostoreLootItemOpcode(WorldPacket& recvData)
+@@ -243,7 +245,12 @@ void WorldSession::HandleLootOpcode(WorldPacket& recvData)
+     // interrupt cast
+     if (GetPlayer()->IsNonMeleeSpellCast(false))
+         GetPlayer()->InterruptNonMeleeSpells(false);
++
++    // 大秘境钩子：玩家尝试拾取生物
++    sVirtualKeystoneMgr->OnPlayerAttemptLoot(GetPlayer(), guid);
++
+ }
++
+
+4、
+	 src/server/game/Instances/InstanceScript.cpp | 84 +++++++++++++++++++++++++++-
+ 1 file changed, 83 insertions(+), 1 deletion(-)
+
+diff --git a/src/server/game/Instances/InstanceScript.cpp b/src/server/game/Instances/InstanceScript.cpp
+index 1a4a00b..6cf73dc 100644
+--- a/src/server/game/Instances/InstanceScript.cpp
++++ b/src/server/game/Instances/InstanceScript.cpp
+@@ -1,4 +1,4 @@
+-/*
++﻿/*
+  * Copyright (C) 2016+     AzerothCore <www.azerothcore.org>, released under GNU GPL v2 license: https://github.com/azerothcore/azerothcore-wotlk/blob/master/LICENSE-GPL2
+  * Copyright (C) 2008-2016 TrinityCore <http://www.trinitycore.org/>
+  * Copyright (C) 2005-2009 MaNGOS <http://getmangos.com/>
+@@ -470,3 +470,85 @@ std::string InstanceScript::GetBossStateName(uint8 state)
+             return "INVALID";
+     }
+ }
++
++////////////////////////////////////自定义大秘境系统//////////////////////////////////
++
++//void InstanceScript::Update(uint32 diff)
++//{
++//    // ... 其他代码 ...
++//
++//    if (timeLimit && time(nullptr) - instanceStartTime >= timeLimit)
++//    {
++//        // 超出时间限制，执行相应的动作
++//        EndInstanceDueToTimeLimit();  // 我们自定义的函数
++//    }
++//
++//    // ... 其他代码 ...
++//}
++
++void InstanceScript::EndInstanceDueToTimeLimit()
++{
++    // 这里你可以决定如何处理超时的副本，例如踢出所有玩家、发送消息等
++}
++
++//副本时间限制
++void InstanceScript::SetTimeLimit(uint32 limit) 
++{
++    timeLimit = limit;
++    instanceStartTime = time(nullptr);
++}
++
++//提高副本内所有生物的属性
++void InstanceScript::BoostCreatureStats(float multiplier)
++{
++    // 获取副本内所有玩家
++    Map::PlayerList const &players = instance->GetPlayers();
++    for (Map::PlayerList::const_iterator itr = players.begin(); itr != players.end(); ++itr)
++    {
++        if (Player* player = itr->GetSource())
++        {
++            // 获取玩家周围的所有生物
++            std::list<Creature*> creatureList;
++            player->GetCreatureListWithEntryInGrid(creatureList, 0, 100.0f); //假设100.0f是视野范围
++            for (Creature* creature : creatureList)
++            {
++                // 修改生物的最大生命值和当前生命值
++                creature->SetMaxHealth(creature->GetMaxHealth() * multiplier);
++                creature->SetHealth(creature->GetMaxHealth());
++                //此处可进一步扩展，如增加伤害等
++            }
++        }
++    }
++}
++
++void InstanceScript::ApplyMythicPlusEffects()
++{
++    MythicPlusDifficulty difficulty = instance->GetMythicPlusDifficulty();
++
++    switch (difficulty)
++    {
++    case MYTHIC_PLUS_NORMAL:
++        // 默认效果，可能不需要任何改变
++        break;
++    case MYTHIC_PLUS_AVERAGE:
++        // 增加一些中等难度的效果，比如提高怪物属性
++        BoostCreatureStats(1.2f); // 假设有这样一个函数，提高怪物属性20%
++        break;
++    case MYTHIC_PLUS_HARD:
++        BoostCreatureStats(1.5f);
++        AddNewMechanics(); // 假设有这样一个函数，添加新的机制
++        break;
++    case MYTHIC_PLUS_DOOM:
++        BoostCreatureStats(2.0f);
++        AddNewMechanics();
++        SetTimeLimit(40); // 假设有这样一个函数，设置40分钟的时间限制
++        break;
++    }
++}
++
++// 占位函数  以后也许添加新机制或行为 
++void InstanceScript::AddNewMechanics()
++{
++    // 这里是你希望增加的新机制或行为的实现
++    // 例如：为某些生物添加新的AI、改变生物的行为或触发新事件等
++}
+
+
+5、
+ src/server/game/Instances/InstanceScript.h | 61 ++++++++++++++++++++----------
+ 1 file changed, 42 insertions(+), 19 deletions(-)
+
+diff --git a/src/server/game/Instances/InstanceScript.h b/src/server/game/Instances/InstanceScript.h
+index 3c4392f..4ab3f78 100644
+--- a/src/server/game/Instances/InstanceScript.h
++++ b/src/server/game/Instances/InstanceScript.h
+@@ -1,4 +1,4 @@
+-/*
++﻿/*
+  * Copyright (C) 2016+     AzerothCore <www.azerothcore.org>, released under GNU GPL v2 license: https://github.com/azerothcore/azerothcore-wotlk/blob/master/LICENSE-GPL2
+  * Copyright (C) 2008-2016 TrinityCore <http://www.trinitycore.org/>
+  * Copyright (C) 2005-2009 MaNGOS <http://getmangos.com/>
+@@ -7,11 +7,12 @@
+ #ifndef ACORE_INSTANCE_DATA_H
+ #define ACORE_INSTANCE_DATA_H
+ 
+-//#include "GameObject.h"
+-//#include "Map.h"
++ //#include "GameObject.h"
++ //#include "Map.h"
+ #include "ObjectMgr.h"
+ #include "World.h"
+ #include "ZoneScript.h"
++#include "_Sm_TestDaMiJing.h"
+ 
+
++
++
++
++///////////////////////////////////////////////////////////////////////////////////////自定义大秘境
++public:
++    // 设置副本的时间限制
++    void SetTimeLimit(uint32 limit); 
++    // 在InstanceScript类的public部分
++    void CreateMythicPlusInstance(Player* player, MythicPlusDifficulty difficulty);
++    void ApplyMythicPlusEffects();
++
++private:
++    time_t instanceStartTime;   // 副本开始的时间（我们自定义的）
++    uint32 timeLimit;           // 时间限制，单位：秒（我们自定义的）
++    // 定义一个函数，提高生物的属性
++    void BoostCreatureStats(float multiplier);
++
++    // 处理超时
++    void EndInstanceDueToTimeLimit();
++
++    // 占位函数  以后也许添加新机制或行为 
++    void AddNewMechanics();
+ };
+ 
+ template<class AI, class T>
+
+
+6、
+ src/server/game/Maps/Map.h | 17 ++++++++++++++++-
+ 1 file changed, 16 insertions(+), 1 deletion(-)
+
+diff --git a/src/server/game/Maps/Map.h b/src/server/game/Maps/Map.h
+index fb69a56..b8a4efa 100644
+--- a/src/server/game/Maps/Map.h
++++ b/src/server/game/Maps/Map.h
+@@ -1,4 +1,4 @@
+-/*
++﻿/*
+  * Copyright (C) 2016+     AzerothCore <www.azerothcore.org>, released under GNU GPL v2 license: https://github.com/azerothcore/azerothcore-wotlk/blob/master/LICENSE-GPL2
+  * Copyright (C) 2008-2016 TrinityCore <http://www.trinitycore.org/>
+  * Copyright (C) 2005-2009 MaNGOS <http://getmangos.com/>
+@@ -24,6 +24,7 @@
+ #include <ace/Thread_Mutex.h>
+ #include <bitset>
+ #include <list>
++#include "../scripts/Custom/_Sm_TestDaMiJing/_Sm_TestDaMiJing.h" //自定义大秘境系统
+ 
+ class Unit;
+ class WorldPacket;
+@@ -310,6 +311,20 @@ public:
+ 
+     //xh2+
+ 
++    ////////////////////////////////////自定义大秘境系统//////////////////////////////////
++private:
++    MythicPlusDifficulty _mythicPlusDifficulty = MYTHIC_PLUS_NORMAL; // 默认为普通难度
++
++public:
++    // 设置大秘境的难度
++    void SetMythicPlusDifficulty(MythicPlusDifficulty difficulty) { _mythicPlusDifficulty = difficulty; }
++
++    // 获取大秘境的难度
++    MythicPlusDifficulty GetMythicPlusDifficulty() const { return _mythicPlusDifficulty; }
++    ////////////////////////////////////自定义大秘境系统//////////////////////////////////
++
++
++
+     ~Map() override;
+ 
+     [[nodiscard]] MapEntry const* GetEntry() const { return i_mapEntry; }
+
+
+7、
+ src/server/game/Server/Protocol/Opcodes.h | 9 +++++++--
+ 1 file changed, 7 insertions(+), 2 deletions(-)
+
+diff --git a/src/server/game/Server/Protocol/Opcodes.h b/src/server/game/Server/Protocol/Opcodes.h
+index 633a863..08c82e9 100644
+--- a/src/server/game/Server/Protocol/Opcodes.h
++++ b/src/server/game/Server/Protocol/Opcodes.h
+@@ -1,4 +1,4 @@
+-/*
++﻿/*
+  * Copyright (C) 2016+     AzerothCore <www.azerothcore.org>, released under GNU GPL v2 license: https://github.com/azerothcore/azerothcore-wotlk/blob/master/LICENSE-GPL2
+  * Copyright (C) 2008-2016 TrinityCore <http://www.trinitycore.org/>
+  * Copyright (C) 2005-2009 MaNGOS <http://getmangos.com/>
+@@ -1327,7 +1327,12 @@ enum Opcodes
+     SMSG_COMMENTATOR_SKIRMISH_QUEUE_RESULT1         = 0x51C,
+     SMSG_COMMENTATOR_SKIRMISH_QUEUE_RESULT2         = 0x51D,
+     SMSG_MULTIPLE_MOVES                             = 0x51E, // uncompressed version of SMSG_COMPRESSED_MOVES
+-    NUM_MSG_TYPES                                   = 0x51F
++
++    SMSG_VIRTUAL_KEYSTONE_INFO                      = 0x51F, // 大秘境操作码                                                             
++    NUM_MSG_TYPES                                   = 0x520
++
++    //NUM_MSG_TYPES                                   = 0x51F,
++     
+ };
+ 
+ /// Player state
+
+下面是新增的自定义脚本cpp和.h
+8、
+ .../_Sm_TestDaMiJing/MythicPlusPlayerScript.cpp    | 34 ++++++++++++++++++++++
+ 1 file changed, 34 insertions(+)
+
+diff --git a/src/server/scripts/Custom/_Sm_TestDaMiJing/MythicPlusPlayerScript.cpp b/src/server/scripts/Custom/_Sm_TestDaMiJing/MythicPlusPlayerScript.cpp
+new file mode 100644
+index 0000000..6498cc3
+--- /dev/null
++++ b/src/server/scripts/Custom/_Sm_TestDaMiJing/MythicPlusPlayerScript.cpp
+@@ -0,0 +1,34 @@
++﻿//VirtualKeystoneManager.cpp
++
++#include "VirtualKeystoneManager.h"
++
++
++class CustomMythicPlusPlayerScript : public PlayerScript
++{
++public:
++    CustomMythicPlusPlayerScript() : PlayerScript("CustomMythicPlusPlayerScript") {}
++
++    void OnCreatureKill(Player* killer, Creature* killed) override
++    {
++        // 检查这个生物是否在钥石掉落表中
++        auto possibleKeystones = sVirtualKeystoneMgr->GetPossibleKeystonesForCreature(killed->GetEntry());
++        if (possibleKeystones.empty())
++            return;
++
++        // 存储生物掉落的钥石信息，待玩家拾取时使用
++        killer->StorePendingKeystoneDrop(possibleKeystones);
++
++        // 随机选择一个钥石掉落
++        uint32 keystoneId = acore::Containers::SelectRandomContainerElement(possibleKeystones);
++        KeystoneDefinition keystoneDef = sVirtualKeystoneMgr->GetKeystoneDefinition(keystoneId);
++
++        // 在这里，你可以为玩家生成一个虚拟的钥石并显示在拾取界面上
++        // ... 此处需要与你的插件进行交互，以正确地显示钥石。
++    }
++};
++
++// 在外部函数中注册脚本
++void AddSC_CustomMythicPlusScripts()
++{
++    new CustomMythicPlusPlayerScript();
++}
+
+
+9、
+ .../_Sm_TestDaMiJing/VirtualKeystoneManager.cpp    | 203 +++++++++++++++++++++
+ 1 file changed, 203 insertions(+)
+
+diff --git a/src/server/scripts/Custom/_Sm_TestDaMiJing/VirtualKeystoneManager.cpp b/src/server/scripts/Custom/_Sm_TestDaMiJing/VirtualKeystoneManager.cpp
+new file mode 100644
+index 0000000..d801797
+--- /dev/null
++++ b/src/server/scripts/Custom/_Sm_TestDaMiJing/VirtualKeystoneManager.cpp
+@@ -0,0 +1,203 @@
++﻿// VirtualKeystoneManager.cpp
++#include "VirtualKeystoneManager.h"
++#include "DatabaseEnv.h"
++
++// 单例实例
++VirtualKeystoneManager* VirtualKeystoneManager::instance()
++{
++    static VirtualKeystoneManager instance;
++    return &instance;
++}
++
++// 创建一个新的钥石
++VirtualKeystone VirtualKeystoneManager::CreateKeystone(uint32 dungeonID, uint32 level)
++{
++    VirtualKeystone newKeystone;
++
++    // 分配一个新的钥石ID
++    static uint32 lastKeystoneID = 0; // 为简化起见，使用一个静态变量
++    newKeystone.keystoneID = ++lastKeystoneID;
++
++    newKeystone.level = level;
++    newKeystone.dungeonID = dungeonID;
++
++    // 在这里，可以向数据库中插入这个新的钥石的信息
++    // ...
++
++    return newKeystone;
++}
++
++void VirtualKeystoneManager::LoadKeystoneDefinitions()
++{
++    // 清空现有的数据
++    _keystoneDefinitions.clear();
++
++    QueryResult result = WorldDatabase.Query("SELECT `钥石ID`, `秘境ID`, `秘境难度`, `钥石名称`, `钥石图标` FROM `_大秘境钥石定义表`");
++    if (!result)
++        return;
++
++    do
++    {
++        Field* fields = result->Fetch();
++        KeystoneDefinition definition;
++        definition.keystoneId = fields[0].GetUInt32();
++        definition.mapId = fields[1].GetUInt32();
++        definition.difficulty = fields[2].GetUInt32();
++        definition.name = fields[3].GetString();
++        definition.iconId = fields[4].GetUInt32();  // 加载图标ID
++
++
++        _keystoneDefinitions[definition.keystoneId] = definition;
++    } while (result->NextRow());
++}
++
++void VirtualKeystoneManager::LoadKeystoneDrops()
++{
++    // 清空现有的数据
++    _keystoneDrops.clear();
++
++    QueryResult result = WorldDatabase.Query("SELECT `生物ID`, `钥石ID` FROM `_大秘境钥石掉落表`");
++    if (!result)
++        return;
++
++    do
++    {
++        Field* fields = result->Fetch();
++        uint32 creatureId = fields[0].GetUInt32();
++        uint32 keystoneId = fields[1].GetUInt32();
++
++        _keystoneDrops[creatureId].push_back(keystoneId);
++    } while (result->NextRow());
++}
++
++
++std::vector<uint32> VirtualKeystoneManager::GetPossibleKeystonesForCreature(uint32 creatureId)
++{
++    auto iter = _keystoneDrops.find(creatureId);
++    if (iter != _keystoneDrops.end())
++    {
++        return iter->second;
++    }
++    return {};  // 返回空列表
++}
++
++KeystoneDefinition VirtualKeystoneManager::GetKeystoneDefinition(uint32 keystoneId)
++{
++    auto iter = _keystoneDefinitions.find(keystoneId);
++    if (iter != _keystoneDefinitions.end())
++    {
++        return iter->second;
++    }
++    return {};  // 返回默认构造的定义
++}
++
++
++LootStoreItem VirtualKeystoneManager::CreateLootStoreItemForKeystone(uint32 keystoneId)
++{
++    uint32 _itemid = 100800;            // 您之前定义的大秘境钥石的假物品ID
++    uint32 _reference = 0;              // 没有使用引用
++    float _chance = 100.0f;             // 100%的掉落率，可以按需要进行调整
++    bool _needs_quest = false;          // 不需要任务
++    uint16 _lootmode = 1;               // 可以根据需要进行调整
++    uint8 _groupid = 0;                 // 分组ID，可以根据需要进行调整
++    int32 _mincount = 1;                // 最小数量
++    uint8 _maxcount = 1;                // 最大数量
++
++    // 创建LootStoreItem对象
++    LootStoreItem lootItem(_itemid, _reference, _chance, _needs_quest, _lootmode, _groupid, _mincount, _maxcount);
++
++    return lootItem;
++}
++
++
++//自定义发送插件文本给玩家
++void SendAddonMessageToPlayer(Player* player, const std::string& prefix, const std::string& message)
++{
++    WorldPacket data(SMSG_MESSAGECHAT, 200);
++    data << uint8(CHAT_MSG_WHISPER);
++    data << uint32(LANG_ADDON);
++    data << player->GetGUID();                              // 发送者的GUID
++    data << uint32(0);                                      // 某些字段，可能根据版本而异
++    data << player->GetGUID();                              // 接收者的GUID，这里设置为自己，因此会发送给自己
++    data << uint32((prefix + " " + message).size() + 1);    // 消息的长度，+1 是因为末尾的'\0'
++    data << prefix + " " + message;
++    data << uint8(0);                                       // 某些字段，可能根据版本而异
++
++    player->SendDirectMessage(&data);
++}
++
++
++/*
++当玩家试图拾取生物时：
++根据生物的guid确定它是否有可能掉落钥石。您可以使用之前创建的GetPossibleKeystonesForCreature函数。
++如果有可能掉落钥石，随机选择一个并将其添加到待拾取的钥石列表中（这可以使用StorePendingKeystoneDrop函数）。
++
++*/
++void VirtualKeystoneManager::OnPlayerAttemptLoot(Player* player,uint64 guid)
++{
++    // 从GUID中提取生物ID
++    uint32 creatureId = GUID_ENPART(guid); // 替换为实际的函数或操作
++
++                                           // 获取该生物的钥石掉落
++    std::vector<uint32> possibleKeystones = GetPossibleKeystonesForCreature(creatureId);
++
++    if(!possibleKeystones.empty())
++    {
++        // 获取LootStoreItem表示的钥石
++        LootStoreItem keystoneLootItem = CreateLootStoreItemForKeystone(possibleKeystones[0]);
++
++        //根据生物GUID创建生物
++        Creature* creature = player->GetMap()->GetCreature(guid);
++        if (creature)
++        {
++            // 获取与生物关联的Loot对象
++            Loot& loot = creature->loot;
++            //loot.AddItem(keystoneLootItem);  //这将会添加到原始掉落背包中
++            player->StorePendingKeystoneDrop(possibleKeystones);
++        }
++
++        // 获取钥石的定义
++        KeystoneDefinition keystoneDef = GetKeystoneDefinition(possibleKeystones[0]);
++
++        // 创建并发送数据包
++        std::string message = std::to_string(keystoneDef.keystoneId) + ":"  //钥石物品ID
++            + std::to_string(keystoneDef.mapId) + ":"                       //钥石对应的秘境地图ID
++            + keystoneDef.name + ":"                                        //钥石名称
++            + std::to_string(keystoneDef.difficulty) + ":"                  //秘境难度
++            + std::to_string(keystoneDef.iconId);                           // 包含图标ID
++
++        SendAddonMessageToPlayer(player, "SMSG_VIRTUAL_KEYSTONE_INFO", message);
++
++    }
++    player->GetSession()->SendAreaTriggerMessage("准备拾取物品：%u",guid);
++}
++
++
++/*
++
++当玩家拾取某个物品时：
++检查玩家是否有待拾取的钥石（使用GetPendingKeystoneDrop）。
++如果玩家有待拾取的钥石，并且该物品ID与待拾取的钥石匹配，执行以下操作：
++将钥石添加到玩家背包中。
++如果背包有空间，存储钥石到数据库中的_角色大秘境钥石表。
++
++*/
++void VirtualKeystoneManager::OnPlayerPickItem(Player* player, uint32 itemID)
++{
++    std::optional<uint32> pendingKeystone = player->GetPendingKeystoneDrop();
++
++    if(pendingKeystone && *pendingKeystone == itemID)
++    {
++        // 将钥石添加到玩家背包（如果有空间的话）
++        // ...
++
++        // 存储钥石到数据库中的`_角色大秘境钥石`表
++        // ...
++    }
++
++    // TODO: 在此处添加处理玩家选择某个拾取项时的逻辑
++    player->GetSession()->SendAreaTriggerMessage("拾取了物品：%u",itemID);
++
++}
++
++
+
+10、
+ .../_Sm_TestDaMiJing/VirtualKeystoneManager.h      | 43 ++++++++++++++++++++++
+ 1 file changed, 43 insertions(+)
+
+diff --git a/src/server/scripts/Custom/_Sm_TestDaMiJing/VirtualKeystoneManager.h b/src/server/scripts/Custom/_Sm_TestDaMiJing/VirtualKeystoneManager.h
+new file mode 100644
+index 0000000..458c0db
+--- /dev/null
++++ b/src/server/scripts/Custom/_Sm_TestDaMiJing/VirtualKeystoneManager.h
+@@ -0,0 +1,43 @@
++﻿//VirtualKeystoneManager.h
++#include "LootMgr.h"
++
++#ifndef VIRTUAL_KEYSTONE_MANAGER_H
++#define VIRTUAL_KEYSTONE_MANAGER_H
++
++#include "_Sm_TestDaMiJing.h"
++
++class VirtualKeystoneManager
++{
++public:
++    // 获取单例
++    static VirtualKeystoneManager* instance();
++
++    // 创建一个新的钥石
++    VirtualKeystone CreateKeystone(uint32 dungeonID, uint32 level);
++
++    // ... 其他相关函数，如删除钥石、获取玩家的钥石等
++    void LoadKeystoneDefinitions();
++    void LoadKeystoneDrops();
++
++    std::vector<uint32> GetPossibleKeystonesForCreature(uint32 creatureId);
++    KeystoneDefinition GetKeystoneDefinition(uint32 keystoneId);
++
++    // 当玩家试图拾取某个生物或物品时被调用
++    void OnPlayerAttemptLoot(Player* player, uint64 guid);
++
++    // 当玩家选择某个拾取项时被调用
++    void OnPlayerPickItem(Player* player, uint32 itemID);
++
++    LootStoreItem CreateLootStoreItemForKeystone(uint32 keystoneId);
++
++private:
++    VirtualKeystoneManager() {}
++
++private:
++    std::unordered_map<uint32, KeystoneDefinition> _keystoneDefinitions;
++    std::unordered_map<uint32, std::vector<uint32>> _keystoneDrops;
++};
++
++#define sVirtualKeystoneMgr VirtualKeystoneManager::instance()
++
++#endif // VIRTUAL_KEYSTONE_MANAGER_H
+
+11、
+ .../Custom/_Sm_TestDaMiJing/_Sm_TestDaMiJing.cpp   | 170 +++++++++++++++++++++
+ 1 file changed, 170 insertions(+)
+
+diff --git a/src/server/scripts/Custom/_Sm_TestDaMiJing/_Sm_TestDaMiJing.cpp b/src/server/scripts/Custom/_Sm_TestDaMiJing/_Sm_TestDaMiJing.cpp
+new file mode 100644
+index 0000000..e17b1f1
+--- /dev/null
++++ b/src/server/scripts/Custom/_Sm_TestDaMiJing/_Sm_TestDaMiJing.cpp
+@@ -0,0 +1,170 @@
++﻿// _Sm_TestDaMiJing.cpp
++#include "MapManager.h"
++#include "InstanceScript.h"
++#include "_Sm_TestDaMiJing.h"
++#include "Player.h"
++
++void MythicPlusDifficultyClass::Load()
++{
++    uint32 oldMSTime = getMSTime();
++    sMythicPlusDifficulty->MythicPlusDifficultyVec.clear();
++    QueryResult result = WorldDatabase.PQuery(sWorld->getBoolConfig(CONFIG_ZHCN_DB) ?
++        "SELECT 地图ID,大秘境难度,限时时间,血量倍率,物理攻击倍率,法术攻击倍率,通关奖励模板ID,通关需击杀生物ID FROM _大秘境系统" :
++        "SELECT mapId,Difficulty,countDown,HealthMultiplier,Damage,SpellDamage,rewId,killedEntry FROM _MythicPlusDifficulty");
++    if (!result)
++        return;
++    do
++    {
++        Field* fields = result->Fetch();
++        MythicPlusDifficultyTemplate MythicPlusDifficultyTemp;
++        uint32 index = 0;
++        memset(&MythicPlusDifficultyTemp, 0, sizeof(MythicPlusDifficultyTemp));//用0填充
++        MythicPlusDifficultyTemp.mapId = fields[index++].GetUInt32();
++
++        const char*  str = fields[index++].GetCString();     //类型 难度类型
++        if (stricmp("普通", str) == 0)
++            MythicPlusDifficultyTemp.Difficulty = MYTHIC_PLUS_NORMAL;
++        else if (stricmp("一般", str) == 0)
++            MythicPlusDifficultyTemp.Difficulty = MYTHIC_PLUS_AVERAGE;
++        else if (stricmp("困难", str) == 0)
++            MythicPlusDifficultyTemp.Difficulty = MYTHIC_PLUS_HARD;
++        else if (stricmp("厄运", str) == 0)
++            MythicPlusDifficultyTemp.Difficulty = MYTHIC_PLUS_DOOM;
++        else
++        {
++            // 打印一个错误或警告，并跳过这条记录
++            sLog->outError("scripts", "Unknown MythicPlus Difficulty: %s", str);
++            continue;
++        }
++
++        MythicPlusDifficultyTemp.countDown = fields[index++].GetUInt32();
++        MythicPlusDifficultyTemp.HealthMultiplier = fields[index++].GetUInt32();
++        MythicPlusDifficultyTemp.Damage = fields[index++].GetUInt32();
++        MythicPlusDifficultyTemp.SpellDamage = fields[index++].GetUInt32();
++        MythicPlusDifficultyTemp.rewId = fields[index++].GetUInt32();
++        MythicPlusDifficultyTemp.killedEntry = fields[index++].GetUInt32();
++
++        sMythicPlusDifficulty->MythicPlusDifficultyVec.push_back(MythicPlusDifficultyTemp);
++    } while (result->NextRow());    
++}
++
++
++void InstanceScript::CreateMythicPlusInstance(Player* player, MythicPlusDifficulty difficulty)
++{
++    // 遍历大秘境模板列表，查找是否玩家已经在一个大秘境副本中
++    for (MythicPlusDifficultyTemplate& templateData : sMythicPlusDifficulty->MythicPlusDifficultyVec)
++    {
++        if (player->GetMapId() == templateData.mapId)
++        {
++            ChatHandler(player->GetSession()).PSendSysMessage("你已经在一个大秘境副本中。");
++            return;
++        }
++    }
++
++    // 从模板中获取对应难度的大秘境数据
++    MythicPlusDifficultyTemplate* selectedTemplate = nullptr;
++    for (MythicPlusDifficultyTemplate& templateData : sMythicPlusDifficulty->MythicPlusDifficultyVec)
++    {
++        if (templateData.Difficulty == difficulty)
++        {
++            selectedTemplate = &templateData;
++            break;
++        }
++    }
++
++    if (!selectedTemplate)
++    {
++        // 未找到对应的大秘境模板，错误处理
++        return;
++    }
++
++    // 设置玩家地图的大秘境属性（这些函数需要你自行实现或添加）
++    //player->GetMap()->SetCountdown(selectedTemplate->countDown);
++    //player->GetMap()->AdjustCreatureStats(selectedTemplate->HealthMultiplier, selectedTemplate->Damage, selectedTemplate->SpellDamage);
++    // ... 其他的设置，例如奖励、必须击败的生物等
++
++    // 为玩家进入副本做准备，例如传送玩家
++    //player->TeleportTo(selectedTemplate->mapId, /*x*/, /*y*/, /*z*/, /*orientation*/);
++}
++
++
++static MythicPlusDifficulty StringToMythicPlusDifficulty(const std::string& difficulty)
++{
++    if (difficulty == "MYTHIC_PLUS1")
++        return MYTHIC_PLUS_NORMAL;
++    else if (difficulty == "MYTHIC_PLUS2")
++        return MYTHIC_PLUS_AVERAGE;
++    else if (difficulty == "MYTHIC_PLUS3")
++        return MYTHIC_PLUS_HARD;
++    else if (difficulty == "MYTHIC_PLUS4")
++        return MYTHIC_PLUS_DOOM;
++    else
++        return MYTHIC_PLUS_NORMAL; // 默认情况，你可以选择返回一个错误或异常
++}
++
++
++class MythicPlusSetCommandScript : public CommandScript
++{
++public:
++    MythicPlusSetCommandScript() : CommandScript("MythicPlusSetCommandScript") { }
++
++    std::vector<ChatCommand> GetCommands() const override
++    {
++        static std::vector<ChatCommand> MythicPlusSetCommandTable =
++        {
++            { "set mythicplus", SEC_PLAYER, true, &HandleSetMythicPlusCommand, "" }
++        };
++
++        return MythicPlusSetCommandTable;
++    }
++
++    static bool HandleSetMythicPlusCommand(ChatHandler* pChat, const char* msg)
++    {
++        Player* player = pChat->GetSession()->GetPlayer();
++
++        if (!player || !*msg)
++            return true;
++
++        std::string command(msg);
++        std::string prefix = "mythicplus";
++        size_t pos = command.find(prefix);
++
++        // 检查是否找到"mythicplus"前缀
++        if (pos != std::string::npos)
++        {
++            std::string difficulty = command.substr(pos + prefix.length());
++
++            // 删除前导和尾随的空格
++            difficulty.erase(0, difficulty.find_first_not_of(' '));
++            difficulty.erase(difficulty.find_last_not_of(' ') + 1);
++
++            sLog->outString("difficulty = ：%s", difficulty.c_str());
++
++            if (difficulty == "MYTHIC_PLUS1" || difficulty == "MYTHIC_PLUS2" || difficulty == "MYTHIC_PLUS3" || difficulty == "MYTHIC_PLUS4")
++            {
++                // 在这里，你可以存储玩家选择的难度或进行其他操作。
++                MythicPlusDifficulty enumDifficulty = StringToMythicPlusDifficulty(difficulty);
++                Map* playerMap = player->GetMap();
++                playerMap->SetMythicPlusDifficulty(enumDifficulty);
++
++                pChat->PSendSysMessage("大秘境难度已设置为：%s", difficulty.c_str());
++            }
++            else
++            {
++                pChat->PSendSysMessage("无效的大秘境难度选择。");
++            }
++        }
++        else
++        {
++            pChat->PSendSysMessage("命令格式不正确。");
++        }
++
++        return true;
++    }
++
++};
++
++void AddSC_MythicPlusSetCommand()
++{
++    new MythicPlusSetCommandScript();
++}
+
+
+12、
+ .../Custom/_Sm_TestDaMiJing/_Sm_TestDaMiJing.h     | 63 ++++++++++++++++++++++
+ 1 file changed, 63 insertions(+)
+
+diff --git a/src/server/scripts/Custom/_Sm_TestDaMiJing/_Sm_TestDaMiJing.h b/src/server/scripts/Custom/_Sm_TestDaMiJing/_Sm_TestDaMiJing.h
+new file mode 100644
+index 0000000..7d800bc
+--- /dev/null
++++ b/src/server/scripts/Custom/_Sm_TestDaMiJing/_Sm_TestDaMiJing.h
+@@ -0,0 +1,63 @@
++﻿// _Sm_TestDaMiJing.h
++
++#ifndef MYTHIC_PLUS_H
++#define MYTHIC_PLUS_H
++
++//定义大秘境结构体
++struct MythicPlusDifficultyTemplate
++{
++    uint32  mapId;              //  地图ID
++    uint32  Difficulty;         //  大秘境难度
++    uint32  countDown;          //  限时时间
++    uint32  HealthMultiplier;   //  大秘境生物血量倍率
++    uint32  Damage;             //  大秘境生物物理攻击倍率
++    uint32  SpellDamage;        //  大秘境生物法术攻击倍率
++    uint32  rewId;              //  通关奖励模板ID
++    uint32  killedEntry;        //  通关需击杀生物ID   
++};
++
++//定义大秘境枚举变量
++enum MythicPlusDifficulty
++{
++    MYTHIC_PLUS_NORMAL   = 0,       // 普通大秘境
++    MYTHIC_PLUS_AVERAGE  = 1,       // 一般大秘境
++    MYTHIC_PLUS_HARD     = 2,       // 困难大秘境
++    MYTHIC_PLUS_DOOM     = 3        // 厄运大秘境
++};
++
++//定义钥石结构体
++struct VirtualKeystone
++{
++    uint32 keystoneID;    // 钥石的ID
++    uint32 level;         // 钥石的等级
++    uint32 dungeonID;     // 关联的副本ID
++};
++
++
++struct KeystoneDefinition
++{
++    uint32 keystoneId;   // 钥石ID
++    uint32 mapId;        // 秘境ID (关联的副本ID)
++    uint32 difficulty;   // 秘境难度
++    std::string name;    // 钥石名称
++    uint32 iconId;  // 新增的图标ID
++    // ... 其他字段 ...
++};
++
++class MythicPlusDifficultyClass
++{
++public:
++    static MythicPlusDifficultyClass* instance()
++    {
++        static MythicPlusDifficultyClass instance;
++        return &instance;
++    }
++    void Load();
++    vector<MythicPlusDifficultyTemplate> MythicPlusDifficultyVec;
++
++private:
++
++};
++#define sMythicPlusDifficulty MythicPlusDifficultyClass::instance()
++
++#endif // MYTHIC_PLUS_H
+
+
+我们的大秘境功能修改的就是这些，当然还有char角色库的‘_角色大秘境钥石’表，还有world库的‘_大秘境钥石掉落表’和‘_大秘境钥石定义表’表，
+不过我觉得没必要发吧，毕竟源码里面也是有定义的。
+
+下面是客户端插件，
+
+1、鼠标右击玩家头像的选择大秘境难度功能
+print("Finished loading DifficultyLevels.lua!")
+if not DaMijing_AddonDB then
+    DaMijing_AddonDB = {}
+end
+local frame = CreateFrame("Frame")
+
+function OnMythicPlusSelected(difficulty)
+    if difficulty == MYTHIC_PLUS_DIFFICULTIES.NORMAL.text then
+        DaMijing_AddonDB.selectedDifficulty = "MYTHIC_PLUS1"
+    elseif difficulty == MYTHIC_PLUS_DIFFICULTIES.AVERAGE.text then
+        DaMijing_AddonDB.selectedDifficulty = "MYTHIC_PLUS2"
+    elseif difficulty == MYTHIC_PLUS_DIFFICULTIES.HARD.text then
+        DaMijing_AddonDB.selectedDifficulty = "MYTHIC_PLUS3"
+    elseif difficulty == MYTHIC_PLUS_DIFFICULTIES.DOOM.text then
+        DaMijing_AddonDB.selectedDifficulty = "MYTHIC_PLUS4"
+    end
+    SendChatMessage(".set mythicplus " .. DaMijing_AddonDB.selectedDifficulty, "GUILD")
+end
+
+local function ModifyUnitPopupMenus()
+    for _, item in pairs(UnitPopupMenus["SELF"]) do
+        if item == "MYTHIC_PLUS" then
+            return
+        end
+    end
+
+    for index, item in pairs(UnitPopupMenus["SELF"]) do
+        if item == "RAID_DIFFICULTY" then
+            table.insert(UnitPopupMenus["SELF"], index + 1, "MYTHIC_PLUS")
+            break
+        end
+    end
+end
+
+frame:RegisterEvent("PLAYER_LOGIN")
+frame:SetScript("OnEvent", function(self, event, ...)
+    if event == "PLAYER_LOGIN" then
+        ModifyUnitPopupMenus() 
+        UnitPopupButtons["MYTHIC_PLUS"] = { text = "大秘境", dist = 0, nested = 1 }
+
+        UnitPopupButtons["MYTHIC_PLUS1"] = { text = MYTHIC_PLUS_DIFFICULTIES.NORMAL.text, dist = 0, checked = true }
+        UnitPopupButtons["MYTHIC_PLUS2"] = { text = MYTHIC_PLUS_DIFFICULTIES.AVERAGE.text, dist = 0 }
+        UnitPopupButtons["MYTHIC_PLUS3"] = { text = MYTHIC_PLUS_DIFFICULTIES.HARD.text, dist = 0 }
+        UnitPopupButtons["MYTHIC_PLUS4"] = { text = MYTHIC_PLUS_DIFFICULTIES.DOOM.text, dist = 0 }
+        UnitPopupMenus["MYTHIC_PLUS"] = { "MYTHIC_PLUS1", "MYTHIC_PLUS2", "MYTHIC_PLUS3", "MYTHIC_PLUS4" };
+        hooksecurefunc("UnitPopup_ShowMenu", ModifyUnitPopupMenus)
+
+        if DaMijing_AddonDB.selectedDifficulty and UnitPopupButtons[DaMijing_AddonDB.selectedDifficulty] then
+            print("初始化成功")
+            UnitPopupButtons[DaMijing_AddonDB.selectedDifficulty].check = true
+            -- ... 可能还需要其他代码来更新UI ...
+        end
+    end
+end)
+
+hooksecurefunc("UnitPopup_OnClick", function(self)
+    local button = _G[self:GetName()]
+    local buttonText = button:GetText()
+
+    -- 清除所有的check属性
+    for _, item in pairs(UnitPopupMenus["MYTHIC_PLUS"]) do
+        UnitPopupButtons[item].check = false
+    end
+
+    -- 根据点击的按钮设置check属性
+    if buttonText == MYTHIC_PLUS_DIFFICULTIES.NORMAL.text then
+        UnitPopupButtons["MYTHIC_PLUS1"].check = true
+    elseif buttonText == MYTHIC_PLUS_DIFFICULTIES.AVERAGE.text then
+        UnitPopupButtons["MYTHIC_PLUS2"].check = true
+    elseif buttonText == MYTHIC_PLUS_DIFFICULTIES.HARD.text then
+        UnitPopupButtons["MYTHIC_PLUS3"].check = true
+    elseif buttonText == MYTHIC_PLUS_DIFFICULTIES.DOOM.text then
+        UnitPopupButtons["MYTHIC_PLUS4"].check = true
+    end
+
+    OnMythicPlusSelected(buttonText)
+end)
+
+-- 这个函数会在官方的UnitPopup_ShowMenu之后执行
+local function CustomizeMythicPlusMenu(dropdownMenu, which, unit, name, userData)
+    local MYTHIC_PLUS_OFFSET = 0; -- 初始值为0
+    if which ~= "SELF" then       -- 我们只对SELF菜单感兴趣
+        return
+    end
+
+    for i = 1, UIDROPDOWNMENU_MAXBUTTONS do -- 遍历所有菜单项
+        local button = _G["DropDownList" .. UIDROPDOWNMENU_MENU_LEVEL .. "Button" .. i]
+        local buttonText = button:GetText()
+
+        -- 检查是否是您的“大秘境”难度
+        if buttonText == "普通" or buttonText == "一般" or buttonText == "困难" or buttonText == "厄运" then
+            -- 如果此难度在UnitPopupButtons中被标记为选中，则设置checked属性
+            if UnitPopupButtons["MYTHIC_PLUS" .. (i - MYTHIC_PLUS_OFFSET)].check then -- 注意：您可能需要根据实际情况调整SOME_OFFSET的值
+                button.checked = true
+                _G[button:GetName() .. "Check"]:Show()                                -- 显示“√”图标
+            else
+                button.checked = false
+                _G[button:GetName() .. "Check"]:Hide() -- 隐藏“√”图标
+            end
+        end
+    end
+end
+
+-- hook到官方的UnitPopup_ShowMenu函数
+hooksecurefunc("UnitPopup_ShowMenu", CustomizeMythicPlusMenu)
+
+2、拾取窗口显示功能
+<!-- PlayerAttemptLoot.xml -->
+<Ui xmlns="http://www.blizzard.com/wow/ui/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://www.blizzard.com/wow/ui/ ..\FrameXML\UI.xsd">
+
+	<!-- 按钮模板 -->
+	<Button name="PlayerAttemptLootButtonTemplate" inherits="ItemButtonTemplate" virtual="true">
+		<Layers>
+			<Layer level="ARTWORK">
+				<Texture name="$parentNameFrame" file="Interface\QuestFrame\UI-QuestItemNameFrame">
+					<Size>
+						<AbsDimension x="130" y="62" />
+					</Size>
+					<Anchors>
+						<Anchor point="LEFT">
+							<Offset>
+								<AbsDimension x="30" y="0" />
+							</Offset>
+						</Anchor>
+					</Anchors>
+				</Texture>
+
+				<Texture name="$parentIcon" file="">
+					<Size>
+						<AbsDimension x="40" y="40"/> <!-- 设置图标的大小 -->
+					</Size>
+					<Anchors>
+						<Anchor point="LEFT"> <!-- 设置图标的位置 -->
+							<Offset>
+								<AbsDimension x="0" y="0"/>
+							</Offset>
+						</Anchor>
+					</Anchors>
+				</Texture>
+
+				<FontString name="$parentText" inherits="GameFontNormal" justifyH="LEFT">
+					<Size>
+						<AbsDimension x="93" y="38" />
+					</Size>
+					<Anchors>
+						<Anchor point="LEFT" relativePoint="RIGHT">
+							<Offset>
+								<AbsDimension x="8" y="0" />
+							</Offset>
+						</Anchor>
+					</Anchors>
+				</FontString>
+			</Layer>
+		</Layers>
+		<!-- <Scripts>
+			<OnLoad>
+				self:RegisterForClicks("LeftButtonUp", "RightButtonUp");
+				self.hasItem = 1;
+			</OnLoad>
+			<OnEnter>
+				LootItem_OnEnter(self);
+			</OnEnter>
+			<OnLeave>
+				GameTooltip:Hide();
+				ResetCursor();
+            </OnLeave>
+			<OnUpdate>
+				if ( GameTooltip:IsOwned(self) ) then
+					LootItem_OnEnter(self);
+				end
+				CursorOnUpdate(self);
+			</OnUpdate>
+			<OnClick>
+				if ( IsModifiedClick() ) then
+					HandleModifiedItemClick(GetLootSlotLink(self.slot));
+				else
+					LootButton_OnClick(self, button);
+				end
+			</OnClick>
+		</Scripts> -->
+	</Button>
+
+	<!-- 拾取框架模板 -->
+	<Frame name="PlayerAttemptLootFrame" frameStrata="HIGH" toplevel="true" movable="true"
+		enableMouse="true" clampedToScreen="true" hidden="true" parent="UIParent">
+		<Size>
+			<AbsDimension x="256" y="256" />
+		</Size>
+		<Anchors>
+			<Anchor point="TOPLEFT">
+				<Offset>
+					<AbsDimension x="0" y="-104" />
+				</Offset>
+			</Anchor>
+		</Anchors>
+		 <TitleRegion setAllPoints="true" /> 
+		<HitRectInsets>
+			<AbsInset left="0" right="70" top="0" bottom="0" />
+		</HitRectInsets>
+		<Layers>
+			<Layer level="BORDER">
+				<Texture name="PlayerAttemptLootPortraitOverlay"
+					file="Interface\TargetingFrame\TargetDead">
+					<Size>
+						<AbsDimension x="58" y="58" />
+					</Size>
+					<Anchors>
+						<Anchor point="TOPLEFT">
+							<Offset>
+								<AbsDimension x="10" y="-8" />
+							</Offset>
+						</Anchor>
+					</Anchors>
+				</Texture>
+			</Layer>
+			<Layer level="ARTWORK">
+				<Texture file="Interface\LootFrame\UI-LootPanel" />
+			</Layer>
+
+			<Layer level="OVERLAY">
+				<FontString name="$parentTitle" inherits="GameFontNormal" text="大秘境掉落">
+					<Anchors>
+						<Anchor point="TOP" relativePoint="TOP">
+							<Offset>
+								<AbsDimension x="-10" y="-20" /> <!-- 你可以调整x和y的值来改变标题的位置 -->
+							</Offset>
+						</Anchor>
+					</Anchors>
+				</FontString>
+			</Layer>
+
+		</Layers>
+
+		<Frames>
+
+			<!-- 关闭按钮 -->
+			<Button name="PlayerAttemptLootCloseButton">
+				<Size>
+					<AbsDimension x="32" y="32" />
+				</Size>
+				<Anchors>
+					<Anchor point="CENTER" relativePoint="TOPRIGHT">
+						<Offset>
+							<AbsDimension x="-81" y="-26" />
+						</Offset>
+					</Anchor>
+				</Anchors>
+				<Scripts>
+					<OnClick>
+						LootWindowFrameClose("PlayerAttemptLootFrame");
+					</OnClick>
+				</Scripts>
+				<NormalTexture file="Interface\Buttons\UI-Panel-MinimizeButton-Up" />
+				<PushedTexture file="Interface\Buttons\UI-Panel-MinimizeButton-Down" />
+				<HighlightTexture file="Interface\Buttons\UI-Panel-MinimizeButton-Highlight" alphaMode="ADD" />
+			</Button>
+
+			<!-- 物品图标按钮 -->
+			<Button name="PlayerAttemptLootButton1" inherits="PlayerAttemptLootButtonTemplate">
+				<Anchors>
+					<Anchor point="TOPLEFT">
+						<Offset>
+							<AbsDimension x="24" y="-80" />
+						</Offset>
+					</Anchor>
+				</Anchors>				
+			</Button>
+		</Frames>
+	</Frame>
+
+</Ui>
+
+3、
+---PlayerAttemptLoot.lua
+
+local SMSG_VIRTUAL_KEYSTONE_INFO = "SMSG_VIRTUAL_KEYSTONE_INFO"
+
+-- 不要创建一个新的框架，而是直接使用XML中定义的框架
+local lootWindow = _G["PlayerAttemptLootFrame"]
+--lootWindow:SetPoint("CENTER") -- 窗口的位置
+lootWindow:Hide()             -- 默认隐藏
+
+function LootWindowFrameClose(lootWindowName)
+    local frame = _G[lootWindowName]
+    frame:Hide()
+end
+
+local keystoneInfoText = lootWindow:CreateFontString(nil, "OVERLAY")
+keystoneInfoText:SetFont("Fonts\\FRIZQT__.TTF", 12, "OUTLINE")
+keystoneInfoText:SetPoint("TOP", 0, -10)
+
+local function UpdateLootWindow(keystoneId, mapId, name, difficulty, iconId)
+    print("Keystone ID: " .. keystoneId)
+    print("Map ID: " .. mapId)
+    print("Keystone Name: " .. name)
+    print("Difficulty: " .. difficulty)
+    print("iconId: " .. iconId)
+
+
+
+    -- 获取LootFrame的位置
+    local lootLeft, lootBottom, lootWidth, lootHeight = LootFrame:GetLeft(), LootFrame:GetBottom(), LootFrame:GetWidth(),
+        LootFrame:GetHeight()
+
+    -- 设置新窗口的位置使其与LootFrame并排
+    --lootWindow:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", lootLeft + lootWidth + 5, lootBottom)
+
+    -- 显示钥石的图标
+    local iconTexturePath = "Interface\\Icons\\INV_Misc_Cape_11" -- 使用GetItemIconInfo函数获取图标的路径
+    --SetItemButtonTexture(itemButton, iconTexturePath)
+
+    local buttonIcon = _G["PlayerAttemptLootButton1Icon"] -- 注意这里是Icon，不是.icon
+    buttonIcon:SetTexture(iconTexturePath)
+
+    local buttonText = _G["PlayerAttemptLootButton1Text"]
+    buttonText:SetText(name)
+
+
+    -- keystoneInfoText:SetText("钥石ID: " .. keystoneId .. "\n" ..
+    --     "地下城ID: " .. mapId .. "\n" ..
+    --     "钥石名称: " .. name .. "\n" ..
+    --     "难度等级: " .. difficulty)
+     lootWindow:Show()
+end
+
+local frame = CreateFrame("Frame")
+frame:RegisterEvent("CHAT_MSG_ADDON")    -- 这个事件在收到插件间的消息时触发
+frame:SetScript("OnEvent", function(self, event, prefix, message, channel, sender)
+    print("Received opcode: " .. prefix) -- 这会打印收到的每个操作码
+    local opcode, message = strsplit(" ", prefix)
+    print("opcode: " .. opcode)          -- 这会打印收到的每个操作码
+    --print("message: " .. message) -- 这会打印收到的每个操作码
+    if opcode == SMSG_VIRTUAL_KEYSTONE_INFO then
+        local keystoneIdStr, mapIdStr, name, difficultyStr, iconIdStr = strsplit(":", message) -- 新增的iconId字段
+        local keystoneId = tonumber(keystoneIdStr)
+        local mapId = tonumber(mapIdStr)
+        local difficulty = tonumber(difficultyStr)
+        local iconId = tonumber(iconIdStr)
+
+        UpdateLootWindow(keystoneId, mapId, name, difficulty, iconId) -- 传递iconId到UpdateLootWindow函数
+    end
+end)
+
+
+
+

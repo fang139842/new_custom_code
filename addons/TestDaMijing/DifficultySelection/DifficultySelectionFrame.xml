@@ -1,0 +1,50 @@
+<!-- DifficultySelectionFrame.xml -->
+<Ui xmlns="http://www.blizzard.com/wow/ui/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.blizzard.com/wow/ui/ ..\FrameXML\UI.xsd">
+
+    <!-- 关闭按钮 -->
+    <Button name="DifficultySelection_CloseButton" virtual="true">
+        <Size>
+            <AbsDimension x="32" y="32" />
+        </Size>
+        <Scripts>
+            <OnClick>
+                DifficultySelection_CloseButtonClick();
+            </OnClick>
+        </Scripts>
+        <NormalTexture file="Interface\AddOns\TestDaMijing\img\selection\关闭按钮_常规" />
+        <PushedTexture file="Interface\AddOns\TestDaMijing\img\selection\关闭按钮_按下" />
+        <HighlightTexture file="Interface\AddOns\TestDaMijing\img\selection\关闭按钮_经过" alphaMode="ADD" />
+    </Button>
+
+    <!-- 子难度按钮 -->
+    <Button name="DifficultysubButtonFrame" virtual="true">
+        <Size>
+            <AbsDimension x="50" y="90" />
+        </Size>
+        <!-- <Scripts>
+            <OnClick>
+                DifficultySelection_CloseButtonClick();
+            </OnClick>
+        </Scripts> -->
+        <NormalTexture file="Interface\AddOns\TestDaMijing\img\selection\子难度按钮纹理" />
+        <PushedTexture file="Interface\AddOns\TestDaMijing\img\selection\子难度按钮纹理" />
+        <HighlightTexture file="Interface\AddOns\TestDaMijing\img\selection\子难度按钮纹理" alphaMode="ADD" />
+    </Button>
+
+    <!-- 关闭按钮 -->
+    <Button name="EnterDifficultyButtonFrame" virtual="true">
+        <Size>
+            <AbsDimension x="188" y="34" />
+        </Size>
+        <!-- <Scripts>
+                <OnClick>
+                    DifficultySelection_CloseButtonClick();
+                </OnClick>
+            </Scripts> -->
+        <NormalTexture file="Interface\AddOns\TestDaMijing\img\selection\进入秘境按钮_普通" />
+        <PushedTexture file="Interface\AddOns\TestDaMijing\img\selection\进入秘境按钮_按下" />
+        <HighlightTexture file="Interface\AddOns\TestDaMijing\img\selection\进入秘境按钮_普通" alphaMode="ADD" />
+    </Button>
+
+</Ui>

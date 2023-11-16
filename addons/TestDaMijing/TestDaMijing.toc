@@ -1,0 +1,24 @@
+# TestDamijing.toc
+## Interface: 30300
+## Version: 1.0
+## Notes-zhCN: 测试按钮组合
+## Title: TestDaMijing
+## LoadOnDemand: 0
+## SavedVariables: DaMijing_AddonDB,itemNamesToGUIDs,MythicKeystones,MYTHIC_PLUS_DIFFICULTIES
+
+################################
+
+# 秘境相关全局数据变量
+
+DifficultyData.lua
+
+#秘境难度 角色头像右键菜单 用UI主界面
+# TestDaMijing.lua
+#钥石拾取框模板
+PlayerAttemptLoot.xml
+#钥石掉落
+PlayerAttemptLoot.lua
+#难度选择界面
+DifficultySelection\DifficultySelectionFrame.xml
+DifficultySelection\DifficultySelectionFrame.lua
+DifficultySelection\DifficultySelection.lua

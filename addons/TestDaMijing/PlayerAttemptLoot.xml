@@ -1,0 +1,162 @@
+<!-- PlayerAttemptLoot.xml -->
+<Ui xmlns="http://www.blizzard.com/wow/ui/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://www.blizzard.com/wow/ui/ ..\FrameXML\UI.xsd">
+
+	<!-- 按钮模板 -->
+	<Button name="PlayerAttemptLootButtonTemplate" inherits="ItemButtonTemplate" virtual="true">
+		<Layers>
+			<Layer level="ARTWORK">
+				<Texture name="$parentNameFrame" file="Interface\QuestFrame\UI-QuestItemNameFrame">
+					<Size>
+						<AbsDimension x="130" y="62" />
+					</Size>
+					<Anchors>
+						<Anchor point="LEFT">
+							<Offset>
+								<AbsDimension x="30" y="0" />
+							</Offset>
+						</Anchor>
+					</Anchors>
+				</Texture>
+
+				<Texture name="$parentIcon" file="">
+					<Size>
+						<AbsDimension x="40" y="40" /> <!-- 设置图标的大小 -->
+					</Size>
+					<Anchors>
+						<Anchor point="LEFT"> <!-- 设置图标的位置 -->
+							<Offset>
+								<AbsDimension x="0" y="0" />
+							</Offset>
+						</Anchor>
+					</Anchors>
+				</Texture>
+
+				<FontString name="$parentText" inherits="GameFontNormal" justifyH="LEFT">
+					<Size>
+						<AbsDimension x="93" y="38" />
+					</Size>
+					<Anchors>
+						<Anchor point="LEFT" relativePoint="RIGHT">
+							<Offset>
+								<AbsDimension x="8" y="0" />
+							</Offset>
+						</Anchor>
+					</Anchors>
+				</FontString>
+			</Layer>
+		</Layers>
+		 <!-- <Scripts>
+			<OnLoad>
+				self:RegisterForClicks("LeftButtonUp", "RightButtonUp");
+				self.hasItem = 1;
+			</OnLoad>
+			<OnEnter>
+				OnDaMiJingKey_LootItem_OnEnter(self);
+			</OnEnter>
+			<OnLeave>
+				GameTooltip:Hide();
+				ResetCursor();
+            </OnLeave>
+			<OnUpdate>
+				if ( GameTooltip:IsOwned(self) ) then
+					LootItem_OnEnter(self);
+				end
+				CursorOnUpdate(self);
+			</OnUpdate>
+			<OnClick>
+				if ( IsModifiedClick() ) then
+					HandleModifiedItemClick(GetLootSlotLink(self.slot));
+				else
+					LootButton_OnClick(self, button);
+				end
+			</OnClick>
+		</Scripts>  -->
+	</Button>
+
+	<!-- 拾取框架模板 -->
+	<Frame name="PlayerAttemptLootFrame" frameStrata="HIGH" toplevel="true" movable="true"	enableMouse="true" clampedToScreen="true" hidden="true" parent="LootFrame">
+		<Size>
+			<AbsDimension x="256" y="256" />
+		</Size>
+		<Anchors>
+			<Anchor point="TOPLEFT">
+				<Offset>
+					<AbsDimension x="0" y="-104" />
+				</Offset>
+			</Anchor>
+		</Anchors>
+		<TitleRegion setAllPoints="true" />
+		<HitRectInsets>
+			<AbsInset left="0" right="70" top="0" bottom="0" />
+		</HitRectInsets>
+		<Layers>
+			<Layer level="BORDER">
+				<Texture name="PlayerAttemptLootPortraitOverlay" file="Interface\AddOns\TestDaMijing\img\PlayerAttemptLoot_Dead">
+					<Size>
+						<AbsDimension x="58" y="58" />
+					</Size>
+					<Anchors>
+						<Anchor point="TOPLEFT">
+							<Offset>
+								<AbsDimension x="10" y="-8" />
+							</Offset>
+						</Anchor>
+					</Anchors>
+				</Texture>
+			</Layer>
+			<Layer level="ARTWORK">
+				<Texture file="Interface\LootFrame\UI-LootPanel" />
+			</Layer>
+
+			<Layer level="OVERLAY">
+				<FontString name="$parentTitle" inherits="GameFontNormal" text="大秘境">
+					<Anchors>
+						<Anchor point="TOP" relativePoint="TOP">
+							<Offset>
+								<AbsDimension x="-10" y="-20" /> <!-- 你可以调整x和y的值来改变标题的位置 -->
+							</Offset>
+						</Anchor>
+					</Anchors>
+				</FontString>
+			</Layer>
+		</Layers>
+		<Frames>
+
+			<!-- 关闭按钮 -->
+			<Button name="PlayerAttemptLootCloseButton">
+				<Size>
+					<AbsDimension x="32" y="32" />
+				</Size>
+				<Anchors>
+					<Anchor point="CENTER" relativePoint="TOPRIGHT">
+						<Offset>
+							<AbsDimension x="-81" y="-26" />
+						</Offset>
+					</Anchor>
+				</Anchors>
+				<Scripts>
+					<OnClick>
+						LootWindowFrameClose("PlayerAttemptLootFrame");
+					</OnClick>
+				</Scripts>
+				<NormalTexture file="Interface\Buttons\UI-Panel-MinimizeButton-Up" />
+				<PushedTexture file="Interface\Buttons\UI-Panel-MinimizeButton-Down" />
+				<HighlightTexture file="Interface\Buttons\UI-Panel-MinimizeButton-Highlight"
+					alphaMode="ADD" />
+			</Button>
+
+			<!-- 物品图标按钮 -->
+			<Button name="PlayerAttemptLootButton1" inherits="PlayerAttemptLootButtonTemplate">
+				<Anchors>
+					<Anchor point="TOPLEFT">
+						<Offset>
+							<AbsDimension x="24" y="-80" />
+						</Offset>
+					</Anchor>
+				</Anchors>
+			</Button>
+		</Frames>
+	</Frame>
+
+</Ui>
